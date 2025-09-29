@@ -14,6 +14,6 @@ COPY package*.json ./
 RUN npm ci --only=production
 COPY --from=builder /app/build ./build
 ENV NODE_ENV=production
-RUN pip install mcpo
+RUN pip install --break-system-packages mcpo
 EXPOSE 3000
 CMD ["mcpo", "--host", "0.0.0.0", "--port", "3000", "--", "node", "build/index.js"]
