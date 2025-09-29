@@ -3,18 +3,15 @@ RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
-RUN npm ci --only=production=false
+RUN npm ci
 COPY src/ src/
 RUN npm run build
 
-FROM python:3.11-slim AS runtime
-RUN apt-get update && apt-get install -y git curl
+FROM node:20-alpine AS runtime
 WORKDIR /app
-COPY --from=builder /app ./
-ENV NODE_ENV=production
-RUN pip install mcpo
-# ensure node dependencies are installed
-RUN apt-get install -y nodejs npm
+COPY package*.json ./
 RUN npm ci --only=production
+COPY --from=builder /app/build ./build
+ENV NODE_ENV=production
 EXPOSE 3000
-CMD ["mcpo", "--host", "0.0.0.0", "--port", "3000", "--", "node", "build/index.js"]
+CMD ["node", "build/index.js"]

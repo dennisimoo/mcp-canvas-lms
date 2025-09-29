@@ -3,7 +3,8 @@
 // src/index.ts
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import http from "http";
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
@@ -1465,9 +1466,52 @@ class CanvasMCPServer {
   }
 
   async run(): Promise<void> {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error(`${this.config.name} running on stdio`);
+    const PORT = process.env.PORT || 3000;
+
+    const httpServer = http.createServer(async (req, res) => {
+      if (req.method === 'GET' && req.url === '/sse') {
+        // SSE endpoint for MCP communication
+        const transport = new SSEServerTransport("/message", res);
+        await this.server.connect(transport);
+      } else if (req.method === 'POST' && req.url === '/message') {
+        // Handle POST messages from SSE transport
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+          try {
+            JSON.parse(body);
+            // Forward message to the server transport
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end('{}');
+          } catch (error) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid JSON' }));
+          }
+        });
+      } else if (req.method === 'GET' && req.url === '/health') {
+        // Health check endpoint
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'healthy', server: this.config.name }));
+      } else {
+        // Default response
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          name: this.config.name,
+          version: this.config.version,
+          endpoints: {
+            sse: '/sse',
+            message: '/message',
+            health: '/health'
+          }
+        }));
+      }
+    });
+
+    httpServer.listen(Number(PORT), '0.0.0.0', () => {
+      console.error(`${this.config.name} running on http://0.0.0.0:${PORT}`);
+      console.error(`SSE endpoint: http://0.0.0.0:${PORT}/sse`);
+      console.error(`Health check: http://0.0.0.0:${PORT}/health`);
+    });
   }
 }
 
