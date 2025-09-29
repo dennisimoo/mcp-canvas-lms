@@ -3,7 +3,6 @@
 // src/index.ts
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import http from "http";
 import {
   CallToolRequestSchema,
@@ -1465,27 +1464,130 @@ class CanvasMCPServer {
     });
   }
 
+  async processToolCall(params: any): Promise<any> {
+    const args = params.arguments || {};
+    const toolName = params.name;
+
+    console.error(`[Canvas MCP] Executing tool: ${toolName}`);
+    console.error(`[Canvas MCP] Arguments:`, JSON.stringify(args, null, 2));
+
+    // Reuse the same logic from the CallToolRequestSchema handler
+    switch (toolName) {
+      case 'canvas_health_check':
+        try {
+          const health = await this.client.healthCheck();
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify(health, null, 2)
+            }]
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: "text",
+              text: `Canvas API connection failed: ${error instanceof Error ? error.message : String(error)}`
+            }],
+            isError: true
+          };
+        }
+
+      // Add other tool cases as needed - for now, just handle the basic ones
+      default:
+        return {
+          content: [{
+            type: "text",
+            text: `Tool ${toolName} is not yet supported in HTTP mode. Available tools: canvas_health_check`
+          }],
+          isError: true
+        };
+    }
+  }
+
   async run(): Promise<void> {
     const PORT = process.env.PORT || 3000;
 
     const httpServer = http.createServer(async (req, res) => {
-      if (req.method === 'GET' && req.url === '/sse') {
-        // SSE endpoint for MCP communication
-        const transport = new SSEServerTransport("/message", res);
-        await this.server.connect(transport);
-      } else if (req.method === 'POST' && req.url === '/message') {
-        // Handle POST messages from SSE transport
+      // Set CORS headers for Open WebUI
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+      }
+
+      if (req.method === 'POST' && (req.url === '/' || req.url === '/mcp')) {
+        // Handle MCP JSON-RPC messages
         let body = '';
         req.on('data', chunk => body += chunk);
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
-            JSON.parse(body);
-            // Forward message to the server transport
+            const message = JSON.parse(body);
+            console.error('Received MCP message:', JSON.stringify(message, null, 2));
+
+            // Handle the MCP request directly
+            let response;
+
+            if (message.method === 'initialize') {
+              response = {
+                jsonrpc: "2.0",
+                id: message.id,
+                result: {
+                  protocolVersion: "2024-11-05",
+                  capabilities: {
+                    tools: {},
+                    resources: {}
+                  },
+                  serverInfo: {
+                    name: this.config.name,
+                    version: this.config.version
+                  }
+                }
+              };
+            } else if (message.method === 'tools/list') {
+              response = {
+                jsonrpc: "2.0",
+                id: message.id,
+                result: {
+                  tools: TOOLS
+                }
+              };
+            } else if (message.method === 'tools/call') {
+              // Handle tool calls directly
+              const result = await this.processToolCall(message.params);
+              response = {
+                jsonrpc: "2.0",
+                id: message.id,
+                result: result
+              };
+            } else {
+              response = {
+                jsonrpc: "2.0",
+                id: message.id,
+                error: {
+                  code: -32601,
+                  message: "Method not found"
+                }
+              };
+            }
+
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end('{}');
+            res.end(JSON.stringify(response));
           } catch (error) {
+            console.error('Error processing MCP message:', error);
+            const errorResponse = {
+              jsonrpc: "2.0",
+              id: null,
+              error: {
+                code: -32700,
+                message: "Parse error"
+              }
+            };
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Invalid JSON' }));
+            res.end(JSON.stringify(errorResponse));
           }
         });
       } else if (req.method === 'GET' && req.url === '/health') {
@@ -1493,14 +1595,14 @@ class CanvasMCPServer {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'healthy', server: this.config.name }));
       } else {
-        // Default response
+        // Default response - MCP server info
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           name: this.config.name,
           version: this.config.version,
+          protocol: "MCP over HTTP",
           endpoints: {
-            sse: '/sse',
-            message: '/message',
+            mcp: '/',
             health: '/health'
           }
         }));
@@ -1509,7 +1611,7 @@ class CanvasMCPServer {
 
     httpServer.listen(Number(PORT), '0.0.0.0', () => {
       console.error(`${this.config.name} running on http://0.0.0.0:${PORT}`);
-      console.error(`SSE endpoint: http://0.0.0.0:${PORT}/sse`);
+      console.error(`MCP endpoint: http://0.0.0.0:${PORT}/`);
       console.error(`Health check: http://0.0.0.0:${PORT}/health`);
     });
   }
