@@ -1710,6 +1710,11 @@ class CanvasMCPServer {
             }));
           }
         });
+      } else if (req.method === 'GET' && req.url === '/') {
+        // For MCP discovery, Open WebUI expects OpenAPI spec at root
+        const openApiSpec = this.generateOpenAPISpec();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(openApiSpec, null, 2));
       } else {
         // Default response - MCP server info
         res.writeHead(200, { 'Content-Type': 'application/json' });
