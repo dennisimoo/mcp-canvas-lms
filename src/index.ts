@@ -1464,6 +1464,94 @@ class CanvasMCPServer {
     });
   }
 
+  generateOpenAPISpec(): any {
+    const paths: any = {};
+
+    // Convert each MCP tool to an OpenAPI path
+    for (const tool of TOOLS) {
+      const pathName = `/tools/${tool.name.replace('canvas_', '')}`;
+      paths[pathName] = {
+        post: {
+          summary: tool.description,
+          description: tool.description,
+          operationId: tool.name,
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: tool.inputSchema
+              }
+            }
+          },
+          responses: {
+            '200': {
+              description: 'Successful response',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      content: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            type: { type: 'string' },
+                            text: { type: 'string' }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      };
+    }
+
+    return {
+      openapi: '3.0.0',
+      info: {
+        title: this.config.name,
+        version: this.config.version,
+        description: 'Canvas LMS MCP Server - Access Canvas courses, assignments, grades, and more'
+      },
+      servers: [
+        {
+          url: '/',
+          description: 'Canvas MCP Server'
+        }
+      ],
+      paths: {
+        ...paths,
+        '/health': {
+          get: {
+            summary: 'Health check',
+            description: 'Check if the server is running',
+            responses: {
+              '200': {
+                description: 'Server is healthy',
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: {
+                        status: { type: 'string' },
+                        server: { type: 'string' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    };
+  }
+
   async processToolCall(params: any): Promise<any> {
     const args = params.arguments || {};
     const toolName = params.name;
@@ -1594,16 +1682,46 @@ class CanvasMCPServer {
         // Health check endpoint
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'healthy', server: this.config.name }));
+      } else if (req.method === 'GET' && (req.url === '/openapi.json' || req.url === '/health/openapi.json')) {
+        // OpenAPI specification for Open WebUI
+        const openApiSpec = this.generateOpenAPISpec();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(openApiSpec, null, 2));
+      } else if (req.method === 'POST' && req.url?.startsWith('/tools/')) {
+        // Handle REST API tool calls (for OpenAPI compatibility)
+        const toolName = 'canvas_' + req.url.split('/tools/')[1];
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+          try {
+            const args = JSON.parse(body);
+            const result = await this.processToolCall({ name: toolName, arguments: args });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (error) {
+            console.error('Error processing REST tool call:', error);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              content: [{
+                type: "text",
+                text: `Error: ${error instanceof Error ? error.message : String(error)}`
+              }],
+              isError: true
+            }));
+          }
+        });
       } else {
         // Default response - MCP server info
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           name: this.config.name,
           version: this.config.version,
-          protocol: "MCP over HTTP",
+          protocol: "MCP over HTTP + OpenAPI",
           endpoints: {
             mcp: '/',
-            health: '/health'
+            health: '/health',
+            openapi: '/openapi.json',
+            tools: '/tools/{tool_name}'
           }
         }));
       }
