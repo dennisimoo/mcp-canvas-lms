@@ -350,7 +350,198 @@ export async function executeCanvasTool(client: CanvasClient, toolName: string, 
       };
     }
 
-    // Add remaining tools here as needed...
+    // Module management
+    case "canvas_list_modules": {
+      const { course_id } = args;
+      if (!course_id) throw new Error("Missing required field: course_id");
+      const modules = await client.listModules(course_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(modules, null, 2) }]
+      };
+    }
+
+    case "canvas_get_module": {
+      const { course_id, module_id } = args;
+      if (!course_id || !module_id) {
+        throw new Error("Missing required fields: course_id and module_id");
+      }
+      const module = await client.getModule(course_id, module_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(module, null, 2) }]
+      };
+    }
+
+    case "canvas_list_module_items": {
+      const { course_id, module_id } = args;
+      if (!course_id || !module_id) {
+        throw new Error("Missing required fields: course_id and module_id");
+      }
+      const items = await client.listModuleItems(course_id, module_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(items, null, 2) }]
+      };
+    }
+
+    case "canvas_mark_module_item_complete": {
+      const { course_id, module_id, item_id } = args;
+      if (!course_id || !module_id || !item_id) {
+        throw new Error("Missing required fields: course_id, module_id, and item_id");
+      }
+      const result = await client.markModuleItemComplete(course_id, module_id, item_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+      };
+    }
+
+    // Discussion management
+    case "canvas_list_discussion_topics": {
+      const { course_id } = args;
+      if (!course_id) throw new Error("Missing required field: course_id");
+      const topics = await client.listDiscussionTopics(course_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(topics, null, 2) }]
+      };
+    }
+
+    case "canvas_get_discussion_topic": {
+      const { course_id, topic_id } = args;
+      if (!course_id || !topic_id) {
+        throw new Error("Missing required fields: course_id and topic_id");
+      }
+      const topic = await client.getDiscussionTopic(course_id, topic_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(topic, null, 2) }]
+      };
+    }
+
+    case "canvas_post_to_discussion": {
+      const { course_id, topic_id, message } = args;
+      if (!course_id || !topic_id || !message) {
+        throw new Error("Missing required fields: course_id, topic_id, and message");
+      }
+      const result = await client.postToDiscussion(course_id, topic_id, message);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+      };
+    }
+
+    // Announcements
+    case "canvas_list_announcements": {
+      const { course_id } = args;
+      if (!course_id) throw new Error("Missing required field: course_id");
+      const announcements = await client.listAnnouncements(course_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(announcements, null, 2) }]
+      };
+    }
+
+    // Quizzes
+    case "canvas_list_quizzes": {
+      const { course_id } = args;
+      if (!course_id) throw new Error("Missing required field: course_id");
+      const quizzes = await client.listQuizzes(course_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(quizzes, null, 2) }]
+      };
+    }
+
+    case "canvas_get_quiz": {
+      const { course_id, quiz_id } = args;
+      if (!course_id || !quiz_id) {
+        throw new Error("Missing required fields: course_id and quiz_id");
+      }
+      const quiz = await client.getQuiz(course_id, quiz_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(quiz, null, 2) }]
+      };
+    }
+
+    case "canvas_create_quiz": {
+      const { course_id } = args;
+      if (!course_id) throw new Error("Missing required field: course_id");
+      const quiz = await client.createQuiz(course_id, args);
+      return {
+        content: [{ type: "text", text: JSON.stringify(quiz, null, 2) }]
+      };
+    }
+
+    case "canvas_start_quiz_attempt": {
+      const { course_id, quiz_id } = args;
+      if (!course_id || !quiz_id) {
+        throw new Error("Missing required fields: course_id and quiz_id");
+      }
+      const attempt = await client.startQuizAttempt(course_id, quiz_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(attempt, null, 2) }]
+      };
+    }
+
+    // Rubrics
+    case "canvas_list_rubrics": {
+      const { course_id } = args;
+      if (!course_id) throw new Error("Missing required field: course_id");
+      const rubrics = await client.listRubrics(course_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(rubrics, null, 2) }]
+      };
+    }
+
+    case "canvas_get_rubric": {
+      const { course_id, rubric_id } = args;
+      if (!course_id || !rubric_id) {
+        throw new Error("Missing required fields: course_id and rubric_id");
+      }
+      const rubric = await client.getRubric(course_id, rubric_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(rubric, null, 2) }]
+      };
+    }
+
+    // Conversations
+    case "canvas_list_conversations": {
+      const conversations = await client.listConversations();
+      return {
+        content: [{ type: "text", text: JSON.stringify(conversations, null, 2) }]
+      };
+    }
+
+    case "canvas_get_conversation": {
+      const { conversation_id } = args;
+      if (!conversation_id) throw new Error("Missing required field: conversation_id");
+      const conversation = await client.getConversation(conversation_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(conversation, null, 2) }]
+      };
+    }
+
+    case "canvas_create_conversation": {
+      const { recipients, body, subject } = args;
+      if (!recipients || !body) {
+        throw new Error("Missing required fields: recipients and body");
+      }
+      const conversation = await client.createConversation(recipients, body, subject);
+      return {
+        content: [{ type: "text", text: JSON.stringify(conversation, null, 2) }]
+      };
+    }
+
+    // Notifications
+    case "canvas_list_notifications": {
+      const notifications = await client.listNotifications();
+      return {
+        content: [{ type: "text", text: JSON.stringify(notifications, null, 2) }]
+      };
+    }
+
+    // Syllabus
+    case "canvas_get_syllabus": {
+      const { course_id } = args;
+      if (!course_id) throw new Error("Missing required field: course_id");
+      const syllabus = await client.getSyllabus(course_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(syllabus, null, 2) }]
+      };
+    }
 
     default:
       throw new Error(`Tool not implemented: ${toolName}. Available tools: canvas_health_check, canvas_list_courses, canvas_get_user_grades, etc.`);
