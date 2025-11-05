@@ -709,7 +709,14 @@ export class CanvasHttpServer {
 
     this.app.post('/message', async (req: Request, res: Response) => {
       try {
+        // Set CORS and content type headers
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', 'application/json');
+
         const { method, params, id } = req.body;
+
+        console.error(`[MCP Message] Method: ${method}, ID: ${id}`);
+        if (params) console.error(`[MCP Message] Params:`, JSON.stringify(params).substring(0, 200));
 
         switch (method) {
           case 'initialize':
@@ -728,6 +735,11 @@ export class CanvasHttpServer {
               },
               id
             });
+            break;
+
+          case 'notifications/initialized':
+            // This is a notification, no response needed
+            res.status(200).end();
             break;
 
           case 'tools/list':
