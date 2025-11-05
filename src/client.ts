@@ -575,8 +575,28 @@ export class CanvasClient {
   }
 
   async getUserGrades(): Promise<any> {
-    const response = await this.client.get('/users/self/grades');
-    return response.data;
+    // Get all courses with enrollments and grades
+    const response = await this.client.get('/courses', {
+      params: {
+        enrollment_state: 'active',
+        include: ['total_scores', 'current_grading_period_scores', 'grading_periods']
+      }
+    });
+
+    // Extract grade information from each course
+    const courses = response.data;
+    const grades = courses.map((course: any) => ({
+      course_id: course.id,
+      course_name: course.name,
+      course_code: course.course_code,
+      enrollments: course.enrollments || [],
+      current_score: course.enrollments?.[0]?.grades?.current_score,
+      final_score: course.enrollments?.[0]?.grades?.final_score,
+      current_grade: course.enrollments?.[0]?.grades?.current_grade,
+      final_grade: course.enrollments?.[0]?.grades?.final_grade
+    }));
+
+    return grades;
   }
 
   // ---------------------
