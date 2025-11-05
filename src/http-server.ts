@@ -540,16 +540,253 @@ export class CanvasHttpServer {
     const swaggerDocument = this.generateOpenAPISpec();
     this.app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
+    // MCP Protocol Endpoints (for Poke and other MCP HTTP clients)
+
+    // MCP Registration endpoint
+    apiRouter.post('/register', async (req: Request, res: Response) => {
+      try {
+        const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        res.json({
+          sessionId,
+          serverInfo: {
+            name: 'canvas-mcp-server',
+            version: this.version,
+            protocolVersion: '2024-11-05',
+            capabilities: {
+              resources: {},
+              tools: {}
+            }
+          }
+        });
+      } catch (error) {
+        res.status(500).json({
+          error: 'RegistrationError',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    });
+
+    // MCP Message endpoint (JSON-RPC)
+    apiRouter.post('/message', async (req: Request, res: Response) => {
+      try {
+        const { method, params, id } = req.body;
+
+        switch (method) {
+          case 'initialize':
+            res.json({
+              jsonrpc: '2.0',
+              result: {
+                protocolVersion: '2024-11-05',
+                serverInfo: {
+                  name: 'canvas-mcp-server',
+                  version: this.version
+                },
+                capabilities: {
+                  resources: {},
+                  tools: {}
+                }
+              },
+              id
+            });
+            break;
+
+          case 'tools/list':
+            res.json({
+              jsonrpc: '2.0',
+              result: {
+                tools: [
+                  {
+                    name: 'canvas_list_courses',
+                    description: 'List all Canvas courses',
+                    inputSchema: { type: 'object', properties: {} }
+                  },
+                  {
+                    name: 'canvas_get_course',
+                    description: 'Get Canvas course details',
+                    inputSchema: {
+                      type: 'object',
+                      properties: { course_id: { type: 'number' } },
+                      required: ['course_id']
+                    }
+                  }
+                  // Add more tools as needed
+                ]
+              },
+              id
+            });
+            break;
+
+          case 'tools/call':
+            const { name, arguments: args } = params;
+
+            // Example tool call handling
+            if (name === 'canvas_list_courses') {
+              const courses = await this.client.listCourses();
+              res.json({
+                jsonrpc: '2.0',
+                result: {
+                  content: [{ type: 'text', text: JSON.stringify(courses, null, 2) }]
+                },
+                id
+              });
+            } else {
+              res.json({
+                jsonrpc: '2.0',
+                error: { code: -32601, message: `Tool not found: ${name}` },
+                id
+              });
+            }
+            break;
+
+          default:
+            res.json({
+              jsonrpc: '2.0',
+              error: { code: -32601, message: `Method not found: ${method}` },
+              id
+            });
+        }
+      } catch (error) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: error instanceof Error ? error.message : 'Internal error'
+          },
+          id: req.body.id || null
+        });
+      }
+    });
+
     // Root endpoint
     this.app.get('/', (req: Request, res: Response) => {
       res.json({
         service: 'canvas-mcp-server',
         version: this.version,
         mode: 'http',
-        documentation: '/docs',
-        health: '/api/health',
+        protocol: 'mcp',
+        endpoints: {
+          register: '/api/register',
+          message: '/api/message',
+          health: '/api/health',
+          docs: '/docs'
+        },
         timestamp: new Date().toISOString()
       });
+    });
+
+    // Standalone MCP endpoints at root level (for compatibility)
+    this.app.post('/register', async (req: Request, res: Response) => {
+      try {
+        const sessionId = `session-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+
+        res.json({
+          sessionId,
+          serverInfo: {
+            name: 'canvas-mcp-server',
+            version: this.version,
+            protocolVersion: '2024-11-05',
+            capabilities: {
+              resources: {},
+              tools: {}
+            }
+          }
+        });
+      } catch (error) {
+        res.status(500).json({
+          error: 'RegistrationError',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    });
+
+    this.app.post('/message', async (req: Request, res: Response) => {
+      try {
+        const { method, params, id } = req.body;
+
+        switch (method) {
+          case 'initialize':
+            res.json({
+              jsonrpc: '2.0',
+              result: {
+                protocolVersion: '2024-11-05',
+                serverInfo: {
+                  name: 'canvas-mcp-server',
+                  version: this.version
+                },
+                capabilities: {
+                  resources: {},
+                  tools: {}
+                }
+              },
+              id
+            });
+            break;
+
+          case 'tools/list':
+            res.json({
+              jsonrpc: '2.0',
+              result: {
+                tools: [
+                  {
+                    name: 'canvas_list_courses',
+                    description: 'List all Canvas courses',
+                    inputSchema: { type: 'object', properties: {} }
+                  },
+                  {
+                    name: 'canvas_get_course',
+                    description: 'Get Canvas course details',
+                    inputSchema: {
+                      type: 'object',
+                      properties: { course_id: { type: 'number' } },
+                      required: ['course_id']
+                    }
+                  }
+                ]
+              },
+              id
+            });
+            break;
+
+          case 'tools/call':
+            const { name } = params;
+            const args = params.arguments || {};
+
+            if (name === 'canvas_list_courses') {
+              const courses = await this.client.listCourses();
+              res.json({
+                jsonrpc: '2.0',
+                result: {
+                  content: [{ type: 'text', text: JSON.stringify(courses, null, 2) }]
+                },
+                id
+              });
+            } else {
+              res.json({
+                jsonrpc: '2.0',
+                error: { code: -32601, message: `Tool not found: ${name}` },
+                id
+              });
+            }
+            break;
+
+          default:
+            res.json({
+              jsonrpc: '2.0',
+              error: { code: -32601, message: `Method not found: ${method}` },
+              id
+            });
+        }
+      } catch (error) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: error instanceof Error ? error.message : 'Internal error'
+          },
+          id: req.body.id || null
+        });
+      }
     });
   }
 
