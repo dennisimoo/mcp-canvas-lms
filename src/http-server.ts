@@ -707,6 +707,108 @@ export class CanvasHttpServer {
       }
     });
 
+    // Handle POST to root path (some MCP clients may send messages here)
+    this.app.post('/', async (req: Request, res: Response) => {
+      try {
+        // Set CORS and content type headers
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', 'application/json');
+
+        const { method, params, id } = req.body;
+
+        console.error(`[MCP Message] Method: ${method}, ID: ${id}`);
+        if (params) console.error(`[MCP Message] Params:`, JSON.stringify(params).substring(0, 200));
+
+        switch (method) {
+          case 'initialize':
+            res.json({
+              jsonrpc: '2.0',
+              result: {
+                protocolVersion: '2024-11-05',
+                serverInfo: {
+                  name: 'canvas-mcp-server',
+                  version: this.version
+                },
+                capabilities: {
+                  resources: {},
+                  tools: {}
+                }
+              },
+              id
+            });
+            break;
+
+          case 'notifications/initialized':
+            // This is a notification, no response needed
+            res.status(200).end();
+            break;
+
+          case 'tools/list':
+            res.json({
+              jsonrpc: '2.0',
+              result: {
+                tools: [
+                  {
+                    name: 'canvas_list_courses',
+                    description: 'List all Canvas courses',
+                    inputSchema: { type: 'object', properties: {} }
+                  },
+                  {
+                    name: 'canvas_get_course',
+                    description: 'Get Canvas course details',
+                    inputSchema: {
+                      type: 'object',
+                      properties: { course_id: { type: 'number' } },
+                      required: ['course_id']
+                    }
+                  }
+                ]
+              },
+              id
+            });
+            break;
+
+          case 'tools/call':
+            const { name } = params;
+            const args = params.arguments || {};
+
+            if (name === 'canvas_list_courses') {
+              const courses = await this.client.listCourses();
+              res.json({
+                jsonrpc: '2.0',
+                result: {
+                  content: [{ type: 'text', text: JSON.stringify(courses, null, 2) }]
+                },
+                id
+              });
+            } else {
+              res.json({
+                jsonrpc: '2.0',
+                error: { code: -32601, message: `Tool not found: ${name}` },
+                id
+              });
+            }
+            break;
+
+          default:
+            res.json({
+              jsonrpc: '2.0',
+              error: { code: -32601, message: `Method not found: ${method}` },
+              id
+            });
+        }
+      } catch (error) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: error instanceof Error ? error.message : 'Internal error'
+          },
+          id: req.body.id || null
+        });
+      }
+    });
+
     this.app.post('/message', async (req: Request, res: Response) => {
       try {
         // Set CORS and content type headers
