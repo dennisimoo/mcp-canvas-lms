@@ -540,31 +540,31 @@ export class CanvasHttpServer {
     const swaggerDocument = this.generateOpenAPISpec();
     this.app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-    // MCP Protocol Endpoints (for Poke and other MCP HTTP clients)
+    // MCP Protocol Endpoints (for Poke and other MCP HTTP+SSE clients)
 
-    // MCP Registration endpoint
-    apiRouter.post('/register', async (req: Request, res: Response) => {
-      try {
-        const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    // SSE endpoint - Server-Sent Events for streaming from server to client
+    this.app.get('/sse', (req: Request, res: Response) => {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Access-Control-Allow-Origin', '*');
 
-        res.json({
-          sessionId,
-          serverInfo: {
-            name: 'canvas-mcp-server',
-            version: this.version,
-            protocolVersion: '2024-11-05',
-            capabilities: {
-              resources: {},
-              tools: {}
-            }
-          }
-        });
-      } catch (error) {
-        res.status(500).json({
-          error: 'RegistrationError',
-          message: error instanceof Error ? error.message : 'Unknown error'
-        });
-      }
+      console.error('[MCP SSE] Client connected');
+
+      // Send endpoint event to tell client where to send messages
+      res.write(`event: endpoint\n`);
+      res.write(`data: ${JSON.stringify({ uri: '/message' })}\n\n`);
+
+      // Keep connection alive with periodic ping
+      const keepAlive = setInterval(() => {
+        res.write(': ping\n\n');
+      }, 30000);
+
+      req.on('close', () => {
+        console.error('[MCP SSE] Client disconnected');
+        clearInterval(keepAlive);
+        res.end();
+      });
     });
 
     // MCP Message endpoint (JSON-RPC)
@@ -664,40 +664,18 @@ export class CanvasHttpServer {
         service: 'canvas-mcp-server',
         version: this.version,
         mode: 'http',
-        protocol: 'mcp',
+        protocol: 'mcp-http-sse',
+        transport: 'sse',
         endpoints: {
-          register: '/api/register',
-          message: '/api/message',
+          sse: '/sse',
+          message: '/message',
           health: '/api/health',
-          docs: '/docs'
+          docs: '/docs',
+          api: '/api'
         },
+        description: 'Canvas MCP Server with HTTP+SSE transport',
         timestamp: new Date().toISOString()
       });
-    });
-
-    // Standalone MCP endpoints at root level (for compatibility)
-    this.app.post('/register', async (req: Request, res: Response) => {
-      try {
-        const sessionId = `session-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-
-        res.json({
-          sessionId,
-          serverInfo: {
-            name: 'canvas-mcp-server',
-            version: this.version,
-            protocolVersion: '2024-11-05',
-            capabilities: {
-              resources: {},
-              tools: {}
-            }
-          }
-        });
-      } catch (error) {
-        res.status(500).json({
-          error: 'RegistrationError',
-          message: error instanceof Error ? error.message : 'Unknown error'
-        });
-      }
     });
 
     this.app.post('/message', async (req: Request, res: Response) => {
