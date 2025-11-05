@@ -549,11 +549,11 @@ export class CanvasHttpServer {
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('Access-Control-Allow-Origin', '*');
 
-      console.error('[MCP SSE] Client connected');
+      console.error('[MCP SSE] Client connected to /sse endpoint');
 
       // Send endpoint event to tell client where to send messages
       res.write(`event: endpoint\n`);
-      res.write(`data: ${JSON.stringify({ uri: '/message' })}\n\n`);
+      res.write(`data: /message\n\n`);
 
       // Keep connection alive with periodic ping
       const keepAlive = setInterval(() => {
@@ -561,7 +561,7 @@ export class CanvasHttpServer {
       }, 30000);
 
       req.on('close', () => {
-        console.error('[MCP SSE] Client disconnected');
+        console.error('[MCP SSE] Client disconnected from /sse');
         clearInterval(keepAlive);
         res.end();
       });
@@ -658,24 +658,53 @@ export class CanvasHttpServer {
       }
     });
 
-    // Root endpoint
+    // Root endpoint - Can act as both info endpoint and SSE connection
     this.app.get('/', (req: Request, res: Response) => {
-      res.json({
-        service: 'canvas-mcp-server',
-        version: this.version,
-        mode: 'http',
-        protocol: 'mcp-http-sse',
-        transport: 'sse',
-        endpoints: {
-          sse: '/sse',
-          message: '/message',
-          health: '/api/health',
-          docs: '/docs',
-          api: '/api'
-        },
-        description: 'Canvas MCP Server with HTTP+SSE transport',
-        timestamp: new Date().toISOString()
-      });
+      // Check if client wants SSE (Accept header includes text/event-stream)
+      const acceptHeader = req.headers.accept || '';
+
+      if (acceptHeader.includes('text/event-stream')) {
+        // Client wants SSE connection
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+
+        console.error('[MCP SSE] Client connected to root SSE endpoint');
+
+        // Send endpoint event
+        res.write(`event: endpoint\n`);
+        res.write(`data: /message\n\n`);
+
+        // Keep alive
+        const keepAlive = setInterval(() => {
+          res.write(': ping\n\n');
+        }, 30000);
+
+        req.on('close', () => {
+          console.error('[MCP SSE] Client disconnected');
+          clearInterval(keepAlive);
+          res.end();
+        });
+      } else {
+        // Regular JSON info response
+        res.json({
+          service: 'canvas-mcp-server',
+          version: this.version,
+          mode: 'http',
+          protocol: 'mcp-http-sse',
+          transport: 'sse',
+          endpoints: {
+            sse: '/',
+            message: '/message',
+            health: '/api/health',
+            docs: '/docs',
+            api: '/api'
+          },
+          description: 'Canvas MCP Server with HTTP+SSE transport',
+          timestamp: new Date().toISOString()
+        });
+      }
     });
 
     this.app.post('/message', async (req: Request, res: Response) => {
