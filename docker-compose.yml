@@ -1,0 +1,30 @@
+services:
+  canvas-mcp:
+    build: .
+    container_name: canvas-mcp
+    env_file: .env
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      - CANVAS_MAX_RETRIES=3
+      - CANVAS_RETRY_DELAY=1000
+      - CANVAS_TIMEOUT=30000
+      - SERVER_MODE=http       # Set to 'stdio' for MCP mode or 'http' for REST API
+      - HTTP_PORT=8000         # HTTP server port
+    ports:
+      - "8000:8000"            # HTTP REST API (Swagger docs at /docs)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - ./logs:/app/logs:rw
+    networks:
+      - canvas-network
+
+networks:
+  canvas-network:
+    driver: bridge
