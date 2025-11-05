@@ -18,6 +18,7 @@ import {
   ListAccountUsersArgs,
   CreateReportArgs
 } from './types.js';
+import { TOOLS } from './index.js';
 import swaggerUi from 'swagger-ui-express';
 import { OpenAPIV3 } from 'openapi-types';
 
@@ -821,44 +822,30 @@ export class CanvasHttpServer {
             res.json({
               jsonrpc: '2.0',
               result: {
-                tools: [
-                  {
-                    name: 'canvas_list_courses',
-                    description: 'List all Canvas courses',
-                    inputSchema: { type: 'object', properties: {} }
-                  },
-                  {
-                    name: 'canvas_get_course',
-                    description: 'Get Canvas course details',
-                    inputSchema: {
-                      type: 'object',
-                      properties: { course_id: { type: 'number' } },
-                      required: ['course_id']
-                    }
-                  }
-                ]
+                tools: TOOLS
               },
               id
             });
             break;
 
           case 'tools/call':
-            const { name } = params;
-            const args = params.arguments || {};
+            try {
+              const { name } = params;
+              const args = params.arguments || {};
 
-            if (name === 'canvas_list_courses') {
-              const courses = await this.client.listCourses();
+              const result = await this.executeCanvasTool(name, args);
               res.json({
                 jsonrpc: '2.0',
-                result: {
-                  content: [{ type: 'text', text: JSON.stringify(courses, null, 2) }]
-                },
+                result,
                 id
               });
-            } else {
+            } catch (toolError) {
               res.json({
                 jsonrpc: '2.0',
-                error: { code: -32601, message: `Tool not found: ${name}` },
+                error: {
+                  code: -32602,
+                  message: toolError instanceof Error ? toolError.message : 'Tool execution failed'
+                },
                 id
               });
             }
@@ -1235,6 +1222,63 @@ export class CanvasHttpServer {
           message: error instanceof Error ? error.message : 'Internal error'
         }
       };
+    }
+  }
+
+  private async executeCanvasTool(name: string, args: any): Promise<any> {
+    // Execute Canvas tools - simplified version with most common tools
+    switch (name) {
+      case "canvas_health_check":
+        await this.client.healthCheck();
+        return { content: [{ type: "text", text: "Canvas API is healthy" }] };
+
+      case "canvas_list_courses":
+        const courses = await this.client.listCourses(args.include_ended);
+        return { content: [{ type: "text", text: JSON.stringify(courses, null, 2) }] };
+
+      case "canvas_get_course":
+        if (!args.course_id) throw new Error("Missing required field: course_id");
+        const course = await this.client.getCourse(args.course_id);
+        return { content: [{ type: "text", text: JSON.stringify(course, null, 2) }] };
+
+      case "canvas_get_user_grades":
+        const grades = await this.client.getUserGrades();
+        return { content: [{ type: "text", text: JSON.stringify(grades, null, 2) }] };
+
+      case "canvas_get_course_grades":
+        if (!args.course_id) throw new Error("Missing required field: course_id");
+        const courseGrades = await this.client.getCourseGrades(args.course_id);
+        return { content: [{ type: "text", text: JSON.stringify(courseGrades, null, 2) }] };
+
+      case "canvas_list_assignments":
+        if (!args.course_id) throw new Error("Missing required field: course_id");
+        const assignments = await this.client.listAssignments(args.course_id, args.include_submissions);
+        return { content: [{ type: "text", text: JSON.stringify(assignments, null, 2) }] };
+
+      case "canvas_get_assignment":
+        if (!args.course_id || !args.assignment_id) throw new Error("Missing required fields");
+        const assignment = await this.client.getAssignment(args.course_id, args.assignment_id, args.include_submission);
+        return { content: [{ type: "text", text: JSON.stringify(assignment, null, 2) }] };
+
+      case "canvas_get_dashboard":
+        const dashboard = await this.client.getDashboard();
+        return { content: [{ type: "text", text: JSON.stringify(dashboard, null, 2) }] };
+
+      case "canvas_get_upcoming_assignments":
+        const upcoming = await this.client.getUpcomingAssignments();
+        return { content: [{ type: "text", text: JSON.stringify(upcoming, null, 2) }] };
+
+      case "canvas_list_modules":
+        if (!args.course_id) throw new Error("Missing required field: course_id");
+        const modules = await this.client.listModules(args.course_id);
+        return { content: [{ type: "text", text: JSON.stringify(modules, null, 2) }] };
+
+      case "canvas_get_user_profile":
+        const profile = await this.client.getUserProfile();
+        return { content: [{ type: "text", text: JSON.stringify(profile, null, 2) }] };
+
+      default:
+        throw new Error(`Tool not implemented: ${name}`);
     }
   }
 

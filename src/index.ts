@@ -36,7 +36,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
 // Enhanced tools list with all student-focused endpoints
-const TOOLS: Tool[] = [
+export const TOOLS: Tool[] = [
   // Health and system tools
   {
     name: "canvas_health_check",
