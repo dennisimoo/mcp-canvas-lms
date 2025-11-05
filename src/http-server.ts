@@ -747,47 +747,20 @@ export class CanvasHttpServer {
             res.json({
               jsonrpc: '2.0',
               result: {
-                tools: [
-                  {
-                    name: 'canvas_list_courses',
-                    description: 'List all Canvas courses',
-                    inputSchema: { type: 'object', properties: {} }
-                  },
-                  {
-                    name: 'canvas_get_course',
-                    description: 'Get Canvas course details',
-                    inputSchema: {
-                      type: 'object',
-                      properties: { course_id: { type: 'number' } },
-                      required: ['course_id']
-                    }
-                  }
-                ]
+                tools: this.getAllTools()
               },
               id
             });
             break;
 
           case 'tools/call':
-            const { name } = params;
-            const args = params.arguments || {};
-
-            if (name === 'canvas_list_courses') {
-              const courses = await this.client.listCourses();
-              res.json({
-                jsonrpc: '2.0',
-                result: {
-                  content: [{ type: 'text', text: JSON.stringify(courses, null, 2) }]
-                },
-                id
-              });
-            } else {
-              res.json({
-                jsonrpc: '2.0',
-                error: { code: -32601, message: `Tool not found: ${name}` },
-                id
-              });
-            }
+            const toolResult = await this.handleToolCall(params);
+            res.json({
+              jsonrpc: '2.0',
+              result: toolResult.result,
+              error: toolResult.error,
+              id
+            });
             break;
 
           default:
@@ -909,6 +882,360 @@ export class CanvasHttpServer {
         });
       }
     });
+  }
+
+  private getAllTools(): any[] {
+    return [
+      // Health
+      {
+        name: 'canvas_health_check',
+        description: 'Check the health and connectivity of the Canvas API',
+        inputSchema: { type: 'object', properties: {}, required: [] }
+      },
+      // Courses
+      {
+        name: 'canvas_list_courses',
+        description: 'List all courses for the current user',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            include_ended: { type: 'boolean', description: 'Include ended courses' }
+          },
+          required: []
+        }
+      },
+      {
+        name: 'canvas_get_course',
+        description: 'Get detailed information about a specific course',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            course_id: { type: 'number', description: 'ID of the course' }
+          },
+          required: ['course_id']
+        }
+      },
+      // Assignments
+      {
+        name: 'canvas_list_assignments',
+        description: 'List assignments for a course (includes due dates)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            course_id: { type: 'number', description: 'ID of the course' },
+            include_submissions: { type: 'boolean', description: 'Include submission data' }
+          },
+          required: ['course_id']
+        }
+      },
+      {
+        name: 'canvas_get_assignment',
+        description: 'Get detailed information about a specific assignment (includes due date)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            course_id: { type: 'number', description: 'ID of the course' },
+            assignment_id: { type: 'number', description: 'ID of the assignment' },
+            include_submission: { type: 'boolean', description: 'Include user\'s submission data' }
+          },
+          required: ['course_id', 'assignment_id']
+        }
+      },
+      {
+        name: 'canvas_get_upcoming_assignments',
+        description: 'Get upcoming assignment due dates',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            limit: { type: 'number', description: 'Maximum number of assignments to return' }
+          },
+          required: []
+        }
+      },
+      // Submissions
+      {
+        name: 'canvas_get_submission',
+        description: 'Get submission details for an assignment',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            course_id: { type: 'number', description: 'ID of the course' },
+            assignment_id: { type: 'number', description: 'ID of the assignment' },
+            user_id: { type: 'number', description: 'ID of the user (optional, defaults to self)' }
+          },
+          required: ['course_id', 'assignment_id']
+        }
+      },
+      {
+        name: 'canvas_submit_assignment',
+        description: 'Submit work for an assignment',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            course_id: { type: 'number', description: 'ID of the course' },
+            assignment_id: { type: 'number', description: 'ID of the assignment' },
+            submission_type: { type: 'string', enum: ['online_text_entry', 'online_url', 'online_upload'], description: 'Type of submission' },
+            body: { type: 'string', description: 'Text content for text submissions' },
+            url: { type: 'string', description: 'URL for URL submissions' },
+            file_ids: { type: 'array', items: { type: 'number' }, description: 'File IDs for file submissions' }
+          },
+          required: ['course_id', 'assignment_id', 'submission_type']
+        }
+      },
+      // Modules
+      {
+        name: 'canvas_list_modules',
+        description: 'List all modules in a course',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            course_id: { type: 'number', description: 'ID of the course' }
+          },
+          required: ['course_id']
+        }
+      },
+      {
+        name: 'canvas_list_module_items',
+        description: 'List all items in a module',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            course_id: { type: 'number', description: 'ID of the course' },
+            module_id: { type: 'number', description: 'ID of the module' }
+          },
+          required: ['course_id', 'module_id']
+        }
+      },
+      // Discussions
+      {
+        name: 'canvas_list_discussion_topics',
+        description: 'List all discussion topics in a course',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            course_id: { type: 'number', description: 'ID of the course' }
+          },
+          required: ['course_id']
+        }
+      },
+      // Quizzes
+      {
+        name: 'canvas_list_quizzes',
+        description: 'List all quizzes in a course',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            course_id: { type: 'number', description: 'ID of the course' }
+          },
+          required: ['course_id']
+        }
+      },
+      // User & Profile
+      {
+        name: 'canvas_get_user_profile',
+        description: 'Get current user\'s profile',
+        inputSchema: { type: 'object', properties: {}, required: [] }
+      },
+      // Grades
+      {
+        name: 'canvas_get_course_grades',
+        description: 'Get grades for a course',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            course_id: { type: 'number', description: 'ID of the course' }
+          },
+          required: ['course_id']
+        }
+      },
+      {
+        name: 'canvas_get_user_grades',
+        description: 'Get all grades for the current user',
+        inputSchema: { type: 'object', properties: {}, required: [] }
+      },
+      // Dashboard
+      {
+        name: 'canvas_get_dashboard',
+        description: 'Get user\'s dashboard information',
+        inputSchema: { type: 'object', properties: {}, required: [] }
+      },
+      {
+        name: 'canvas_get_dashboard_cards',
+        description: 'Get dashboard course cards',
+        inputSchema: { type: 'object', properties: {}, required: [] }
+      },
+      // Files
+      {
+        name: 'canvas_list_files',
+        description: 'List files in a course or folder',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            course_id: { type: 'number', description: 'ID of the course' },
+            folder_id: { type: 'number', description: 'ID of the folder (optional)' }
+          },
+          required: ['course_id']
+        }
+      },
+      // Calendar
+      {
+        name: 'canvas_list_calendar_events',
+        description: 'List calendar events',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            start_date: { type: 'string', description: 'Start date (ISO format)' },
+            end_date: { type: 'string', description: 'End date (ISO format)' }
+          },
+          required: []
+        }
+      }
+    ];
+  }
+
+  private async handleToolCall(params: any): Promise<{ result?: any; error?: any }> {
+    try {
+      const { name } = params;
+      const args = params.arguments || {};
+
+      console.error(`[MCP Tool Call] ${name}`);
+
+      switch (name) {
+        case 'canvas_health_check': {
+          const health = await this.client.healthCheck();
+          return { result: { content: [{ type: 'text', text: JSON.stringify(health, null, 2) }] } };
+        }
+
+        case 'canvas_list_courses': {
+          const { include_ended = false } = args;
+          const courses = await this.client.listCourses(include_ended);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(courses, null, 2) }] } };
+        }
+
+        case 'canvas_get_course': {
+          const { course_id } = args;
+          if (!course_id) throw new Error('Missing required field: course_id');
+          const course = await this.client.getCourse(course_id);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(course, null, 2) }] } };
+        }
+
+        case 'canvas_list_assignments': {
+          const { course_id, include_submissions = false } = args;
+          if (!course_id) throw new Error('Missing required field: course_id');
+          const assignments = await this.client.listAssignments(course_id, include_submissions);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(assignments, null, 2) }] } };
+        }
+
+        case 'canvas_get_assignment': {
+          const { course_id, assignment_id, include_submission = false } = args;
+          if (!course_id || !assignment_id) throw new Error('Missing required fields: course_id and assignment_id');
+          const assignment = await this.client.getAssignment(course_id, assignment_id, include_submission);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(assignment, null, 2) }] } };
+        }
+
+        case 'canvas_get_upcoming_assignments': {
+          const { limit = 10 } = args;
+          const assignments = await this.client.getUpcomingAssignments(limit);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(assignments, null, 2) }] } };
+        }
+
+        case 'canvas_get_submission': {
+          const { course_id, assignment_id, user_id } = args;
+          if (!course_id || !assignment_id) throw new Error('Missing required fields: course_id and assignment_id');
+          const submission = await this.client.getSubmission(course_id, assignment_id, user_id || 'self');
+          return { result: { content: [{ type: 'text', text: JSON.stringify(submission, null, 2) }] } };
+        }
+
+        case 'canvas_submit_assignment': {
+          const submitArgs = args as SubmitAssignmentArgs;
+          const { course_id, assignment_id, submission_type } = submitArgs;
+          if (!course_id || !assignment_id || !submission_type) {
+            throw new Error('Missing required fields: course_id, assignment_id, and submission_type');
+          }
+          const submission = await this.client.submitAssignment(submitArgs);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(submission, null, 2) }] } };
+        }
+
+        case 'canvas_list_modules': {
+          const { course_id } = args;
+          if (!course_id) throw new Error('Missing required field: course_id');
+          const modules = await this.client.listModules(course_id);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(modules, null, 2) }] } };
+        }
+
+        case 'canvas_list_module_items': {
+          const { course_id, module_id } = args;
+          if (!course_id || !module_id) throw new Error('Missing required fields: course_id and module_id');
+          const items = await this.client.listModuleItems(course_id, module_id);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(items, null, 2) }] } };
+        }
+
+        case 'canvas_list_discussion_topics': {
+          const { course_id } = args;
+          if (!course_id) throw new Error('Missing required field: course_id');
+          const topics = await this.client.listDiscussionTopics(course_id);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(topics, null, 2) }] } };
+        }
+
+        case 'canvas_list_quizzes': {
+          const { course_id } = args;
+          if (!course_id) throw new Error('Missing required field: course_id');
+          const quizzes = await this.client.listQuizzes(course_id);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(quizzes, null, 2) }] } };
+        }
+
+        case 'canvas_get_user_profile': {
+          const profile = await this.client.getUserProfile();
+          return { result: { content: [{ type: 'text', text: JSON.stringify(profile, null, 2) }] } };
+        }
+
+        case 'canvas_get_course_grades': {
+          const { course_id } = args;
+          if (!course_id) throw new Error('Missing required field: course_id');
+          const grades = await this.client.getCourseGrades(course_id);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(grades, null, 2) }] } };
+        }
+
+        case 'canvas_get_user_grades': {
+          const grades = await this.client.getUserGrades();
+          return { result: { content: [{ type: 'text', text: JSON.stringify(grades, null, 2) }] } };
+        }
+
+        case 'canvas_get_dashboard': {
+          const dashboard = await this.client.getDashboard();
+          return { result: { content: [{ type: 'text', text: JSON.stringify(dashboard, null, 2) }] } };
+        }
+
+        case 'canvas_get_dashboard_cards': {
+          const cards = await this.client.getDashboardCards();
+          return { result: { content: [{ type: 'text', text: JSON.stringify(cards, null, 2) }] } };
+        }
+
+        case 'canvas_list_files': {
+          const { course_id, folder_id } = args;
+          if (!course_id) throw new Error('Missing required field: course_id');
+          const files = await this.client.listFiles(course_id, folder_id);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(files, null, 2) }] } };
+        }
+
+        case 'canvas_list_calendar_events': {
+          const { start_date, end_date } = args;
+          const events = await this.client.listCalendarEvents(start_date, end_date);
+          return { result: { content: [{ type: 'text', text: JSON.stringify(events, null, 2) }] } };
+        }
+
+        default:
+          return { error: { code: -32601, message: `Tool not found: ${name}` } };
+      }
+    } catch (error) {
+      console.error('[MCP Tool Error]', error);
+      return {
+        error: {
+          code: -32603,
+          message: error instanceof Error ? error.message : 'Internal error'
+        }
+      };
+    }
   }
 
   private setupErrorHandling(): void {
