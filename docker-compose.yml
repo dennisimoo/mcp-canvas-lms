@@ -9,9 +9,9 @@ services:
       - CANVAS_RETRY_DELAY=1000
       - CANVAS_TIMEOUT=30000
       - SERVER_MODE=http       # Set to 'stdio' for MCP mode or 'http' for REST API
-      - HTTP_PORT=8000         # HTTP server port
-    ports:
-      - "8000:8000"            # HTTP REST API (Swagger docs at /docs)
+      - HTTP_PORT=8000         # Internal HTTP server port
+    expose:
+      - 8000                   # Internal port exposed to Dokploy's proxy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/api/health"]
