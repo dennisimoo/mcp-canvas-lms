@@ -1,7 +1,6 @@
 services:
   canvas-mcp:
     build: .
-    container_name: canvas-mcp
     env_file: .env
     environment:
       - NODE_ENV=production
