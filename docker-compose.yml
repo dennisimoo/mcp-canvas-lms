@@ -1,10 +1,7 @@
-version: "3.9"
-
 services:
   canvas-mcp:
     build: .
-    # Remove or rename this line to avoid conflicts
-    # container_name: canvas-mcp
+    container_name: canvas-mcp
     env_file: .env
     environment:
       - NODE_ENV=production
@@ -12,10 +9,10 @@ services:
       - CANVAS_MAX_RETRIES=3
       - CANVAS_RETRY_DELAY=1000
       - CANVAS_TIMEOUT=30000
-      - SERVER_MODE=http
-      - HTTP_PORT=8000
+      - SERVER_MODE=http       # Set to 'stdio' for MCP mode or 'http' for REST API
+      - HTTP_PORT=8000         # HTTP server port
     ports:
-      - "8012:8000"
+      - "8000:8000"            # HTTP REST API (Swagger docs at /docs)
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/api/health"]
@@ -26,8 +23,8 @@ services:
     volumes:
       - ./logs:/app/logs:rw
     networks:
-      - canvas_network
+      - canvas-network
 
 networks:
-  canvas_network:
+  canvas-network:
     driver: bridge
