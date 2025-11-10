@@ -1,6 +1,10 @@
+version: "3.9"
+
 services:
   canvas-mcp:
     build: .
+    # Remove or rename this line to avoid conflicts
+    # container_name: canvas-mcp
     env_file: .env
     environment:
       - NODE_ENV=production
@@ -22,4 +26,8 @@ services:
     volumes:
       - ./logs:/app/logs:rw
     networks:
-      - canvas-network
+      - canvas_network
+
+networks:
+  canvas_network:
+    driver: bridge
